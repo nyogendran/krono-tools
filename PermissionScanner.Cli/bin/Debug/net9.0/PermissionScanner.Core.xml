@@ -1,0 +1,378 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>PermissionScanner.Core</name>
+    </assembly>
+    <members>
+        <member name="T:PermissionScanner.Core.Analyzers.EndpointAnalyzer">
+            <summary>
+            Analyzes C# source code to discover Minimal API endpoints using Roslyn.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Analyzers.EndpointAnalyzer.ScanSolutionAsync(System.String)">
+            <summary>
+            Scans a solution directory for all C# files and discovers Minimal API endpoints.
+            </summary>
+            <param name="solutionPath">Path to solution directory or .sln file.</param>
+            <returns>List of discovered endpoints.</returns>
+        </member>
+        <member name="M:PermissionScanner.Core.Analyzers.EndpointAnalyzer.AnalyzeFileAsync(System.String,System.String)">
+            <summary>
+            Analyzes a single C# file for Minimal API endpoints.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Analyzers.EndpointAnalyzer.IsMapMethod(Microsoft.CodeAnalysis.CSharp.Syntax.InvocationExpressionSyntax)">
+            <summary>
+            Checks if an invocation expression is a Map method (MapGet, MapPost, etc.).
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Analyzers.EndpointAnalyzer.ExtractEndpoint(Microsoft.CodeAnalysis.CSharp.Syntax.InvocationExpressionSyntax,System.String,System.String,System.String,System.String,System.String)">
+            <summary>
+            Extracts endpoint information from a Map method invocation.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Analyzers.EndpointAnalyzer.ExtractHttpMethod(System.String)">
+            <summary>
+            Extracts HTTP method from Map method name.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Analyzers.EndpointAnalyzer.ExtractRouteTemplate(Microsoft.CodeAnalysis.CSharp.Syntax.InvocationExpressionSyntax,System.String)">
+            <summary>
+            Extracts route template from Map method invocation.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Analyzers.EndpointAnalyzer.ExtractBaseRoute(Microsoft.CodeAnalysis.SyntaxNode,System.String)">
+            <summary>
+            Extracts base route from MapGroup calls in the file.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Analyzers.EndpointAnalyzer.IsMapGroupCall(Microsoft.CodeAnalysis.CSharp.Syntax.InvocationExpressionSyntax)">
+            <summary>
+            Checks if an invocation is a MapGroup call.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Analyzers.EndpointAnalyzer.ExtractExistingPolicy(Microsoft.CodeAnalysis.CSharp.Syntax.InvocationExpressionSyntax)">
+            <summary>
+            Extracts existing authorization policy from RequireAuthorization call.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Analyzers.EndpointAnalyzer.ExtractServiceName(System.String,System.String)">
+            <summary>
+            Extracts service name from file path.
+            </summary>
+        </member>
+        <member name="T:PermissionScanner.Core.Analyzers.PermissionNameGenerator">
+            <summary>
+            Generates permission names following the {resource}:{action} convention.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Analyzers.PermissionNameGenerator.Generate(System.String,System.String)">
+            <summary>
+            Generates a permission name from HTTP method and route template.
+            </summary>
+            <param name="httpMethod">HTTP method (GET, POST, PUT, PATCH, DELETE).</param>
+            <param name="routeTemplate">Route template (e.g., "/api/v1/products" or "/api/v1/products/{id}/variants").</param>
+            <returns>Permission name in {resource}:{action} format.</returns>
+        </member>
+        <member name="M:PermissionScanner.Core.Analyzers.PermissionNameGenerator.ExtractResource(System.String)">
+            <summary>
+            Extracts resource name from route template.
+            </summary>
+            <example>
+            "/api/v1/products" → "products"
+            "/api/v1/products/{id}/variants" → "products:variants"
+            "/api/v1/platform/clients" → "platform:clients"
+            "/api/v1/admin/number-sequences" → "number-sequences" (admin is a prefix, not resource)
+            "/api/v1/rbac/roles" → "roles" (rbac is a prefix, not resource)
+            "/internal/events" → "events" (internal is a prefix, not resource)
+            </example>
+        </member>
+        <member name="M:PermissionScanner.Core.Analyzers.PermissionNameGenerator.ExtractAction(System.String,System.String)">
+            <summary>
+            Extracts action name from HTTP method and route.
+            </summary>
+            <example>
+            GET → "read"
+            POST → "create"
+            PUT/PATCH → "update"
+            DELETE → "delete"
+            POST /approve → "approve"
+            POST /bulk-delete → "bulk-delete"
+            </example>
+        </member>
+        <member name="M:PermissionScanner.Core.Analyzers.PermissionNameGenerator.GeneratePolicyName(System.String)">
+            <summary>
+            Generates a policy name from permission name.
+            </summary>
+            <example>
+            "products:create" → "RequireProductCreate"
+            "products:read" → "RequireProductView"
+            "approvals:orders:read" → "RequireApprovalOrdersView"
+            "approvals:orders:request:create" → "RequireApprovalOrdersRequestCreate"
+            "number-sequences:read" → "RequireNumberSequenceView"
+            "roles:read" → "RequireRoleView"
+            </example>
+        </member>
+        <member name="M:PermissionScanner.Core.Analyzers.PermissionNameGenerator.ToSingular(System.String)">
+            <summary>
+            Converts plural nouns to singular (simple heuristic with special cases).
+            </summary>
+            <example>
+            "Products" → "Product"
+            "Roles" → "Role"
+            "NumberSequences" → "NumberSequence"
+            "Clients" → "Client"
+            </example>
+        </member>
+        <member name="M:PermissionScanner.Core.Analyzers.PermissionNameGenerator.ToPascalCase(System.String)">
+            <summary>
+            Converts kebab-case or snake_case to PascalCase.
+            </summary>
+            <example>
+            "products" → "Products"
+            "product-variants" → "ProductVariants"
+            "approval_levels" → "ApprovalLevels"
+            </example>
+            <summary>
+            Converts a string to PascalCase.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Analyzers.PermissionNameGenerator.GenerateConstantName(System.String)">
+            <summary>
+            Generates a constant name for Permissions.cs from permission name.
+            </summary>
+            <example>
+            "products:create" → "ProductsCreate"
+            "products:read" → "ProductsRead"
+            "approvals:orders:read" → "ApprovalsOrdersRead"
+            "approvals:orders:request:create" → "ApprovalsOrdersRequestCreate"
+            "approval-levels:view" → "ApprovalLevelsView"
+            </example>
+        </member>
+        <member name="M:PermissionScanner.Core.Analyzers.PermissionNameGenerator.DetermineDomain(System.String)">
+            <summary>
+            Determines the domain/category for a permission based on resource.
+            </summary>
+        </member>
+        <member name="T:PermissionScanner.Core.Generators.PermissionConstantsGenerator">
+            <summary>
+            Generates C# code for Permissions.cs constants class.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Generators.PermissionConstantsGenerator.GenerateFileContent(System.Collections.Generic.List{PermissionScanner.Core.Models.PermissionDefinition},System.String)">
+            <summary>
+            Generates the Permissions.cs file content with permission constants.
+            Merges with existing constants to preserve manual additions.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Generators.PermissionConstantsGenerator.GetDefaultManualPermissions">
+            <summary>
+            Returns default manual permissions that must always be present.
+            These are manually defined permissions not discovered by the scanner.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Generators.PermissionConstantsGenerator.ExtractExistingConstants(System.String)">
+            <summary>
+            Extracts existing constants from file content.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Generators.PermissionConstantsGenerator.ConvertToPermissions(System.Collections.Generic.List{PermissionScanner.Core.Models.DiscoveredEndpoint})">
+            <summary>
+            Converts discovered endpoints to permission definitions.
+            </summary>
+        </member>
+        <member name="T:PermissionScanner.Core.Generators.PolicyConstantsGenerator">
+            <summary>
+            Generates C# code for AuthorizationPolicies.cs constants class.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Generators.PolicyConstantsGenerator.GenerateFileContent(System.Collections.Generic.List{PermissionScanner.Core.Models.PolicyDefinition},System.String)">
+            <summary>
+            Generates the AuthorizationPolicies.cs file content with policy constants.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Generators.PolicyConstantsGenerator.GetSystemPolicyNames">
+            <summary>
+            Gets the canonical list of system policy names.
+            This is the single source of truth for all system policies.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Generators.PolicyConstantsGenerator.ExtractManualPolicies(System.String)">
+            <summary>
+            Extracts manual (non-permission-based) policies from existing content.
+            Preserves system-level policies that don't map to specific permissions.
+            Uses the canonical system policy list to identify which policies to preserve.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Generators.PolicyConstantsGenerator.ExtractPolicyNameFromConstant(System.String)">
+            <summary>
+            Extracts policy name from a constant declaration line.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Generators.PolicyConstantsGenerator.NormalizeIndentation(System.String)">
+            <summary>
+            Normalizes indentation to 4 spaces (standard C# indentation).
+            Removes leading tabs/spaces and replaces with proper 4-space indentation.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Generators.PolicyConstantsGenerator.ConvertToPolicies(System.Collections.Generic.List{PermissionScanner.Core.Models.PermissionDefinition})">
+            <summary>
+            Converts permission definitions to policy definitions.
+            Handles collisions by making policy names more specific or combining permissions.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Generators.PolicyConstantsGenerator.AreSingularPluralVariants(System.String,System.String)">
+            <summary>
+            Checks if two permissions are singular/plural variants of the same resource.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Generators.PolicyConstantsGenerator.GenerateSpecificPolicyName(System.String)">
+            <summary>
+            Generates a more specific policy name to avoid collisions.
+            For singular/plural collisions, preserves the plural form.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Generators.PolicyConstantsGenerator.GetResourceName(System.String)">
+            <summary>
+            Gets resource name from permission for description.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Generators.PolicyConstantsGenerator.GetDefaultSystemPolicies">
+            <summary>
+            Returns default system policies that must always be present.
+            These are non-permission-based policies used for authentication and authorization infrastructure.
+            </summary>
+        </member>
+        <member name="M:PermissionScanner.Core.Generators.PolicyConstantsGenerator.ValidateExistingPolicies(System.String)">
+            <summary>
+            Validates existing policies against naming conventions.
+            Reports policies that don't follow the standard naming pattern.
+            </summary>
+        </member>
+        <member name="T:PermissionScanner.Core.Models.DiscoveredEndpoint">
+            <summary>
+            Represents a discovered API endpoint from the codebase.
+            </summary>
+        </member>
+        <member name="P:PermissionScanner.Core.Models.DiscoveredEndpoint.ServiceName">
+            <summary>
+            Name of the microservice containing this endpoint (e.g., "ProductService").
+            </summary>
+        </member>
+        <member name="P:PermissionScanner.Core.Models.DiscoveredEndpoint.FilePath">
+            <summary>
+            Relative file path from solution root (e.g., "ProductService/KS.ProductService.Api/Endpoints/ProductEndpoints.cs").
+            </summary>
+        </member>
+        <member name="P:PermissionScanner.Core.Models.DiscoveredEndpoint.LineNumber">
+            <summary>
+            Line number where the endpoint is defined.
+            </summary>
+        </member>
+        <member name="P:PermissionScanner.Core.Models.DiscoveredEndpoint.HttpMethod">
+            <summary>
+            HTTP method (GET, POST, PUT, PATCH, DELETE).
+            </summary>
+        </member>
+        <member name="P:PermissionScanner.Core.Models.DiscoveredEndpoint.RouteTemplate">
+            <summary>
+            Route template (e.g., "/api/v1/products" or "/api/v1/products/{id}").
+            </summary>
+        </member>
+        <member name="P:PermissionScanner.Core.Models.DiscoveredEndpoint.ExistingPolicy">
+            <summary>
+            Existing authorization policy name if already applied (e.g., "RequireProductCreate"), or null if not found.
+            </summary>
+        </member>
+        <member name="P:PermissionScanner.Core.Models.DiscoveredEndpoint.SuggestedPermission">
+            <summary>
+            Suggested permission name following {resource}:{action} convention (e.g., "products:create").
+            </summary>
+        </member>
+        <member name="P:PermissionScanner.Core.Models.DiscoveredEndpoint.SuggestedPolicy">
+            <summary>
+            Suggested authorization policy name (e.g., "RequireProductCreate").
+            </summary>
+        </member>
+        <member name="P:PermissionScanner.Core.Models.DiscoveredEndpoint.HasPolicy">
+            <summary>
+            Whether this endpoint already has an authorization policy applied.
+            </summary>
+        </member>
+        <member name="P:PermissionScanner.Core.Models.DiscoveredEndpoint.Resource">
+            <summary>
+            Resource name extracted from route (e.g., "products", "products:variants").
+            </summary>
+        </member>
+        <member name="P:PermissionScanner.Core.Models.DiscoveredEndpoint.Action">
+            <summary>
+            Action name extracted from HTTP method or route (e.g., "read", "create", "update", "delete").
+            </summary>
+        </member>
+        <member name="T:PermissionScanner.Core.Models.PermissionDefinition">
+            <summary>
+            Represents a permission definition with metadata.
+            </summary>
+        </member>
+        <member name="P:PermissionScanner.Core.Models.PermissionDefinition.PermissionName">
+            <summary>
+            Permission name following {resource}:{action} convention (e.g., "products:create").
+            </summary>
+        </member>
+        <member name="P:PermissionScanner.Core.Models.PermissionDefinition.Resource">
+            <summary>
+            Resource name (e.g., "products", "products:variants").
+            </summary>
+        </member>
+        <member name="P:PermissionScanner.Core.Models.PermissionDefinition.Action">
+            <summary>
+            Action name (e.g., "read", "create", "update", "delete").
+            </summary>
+        </member>
+        <member name="P:PermissionScanner.Core.Models.PermissionDefinition.Description">
+            <summary>
+            Human-readable description of the permission.
+            </summary>
+        </member>
+        <member name="P:PermissionScanner.Core.Models.PermissionDefinition.Endpoints">
+            <summary>
+            List of endpoints that use this permission.
+            </summary>
+        </member>
+        <member name="P:PermissionScanner.Core.Models.PermissionDefinition.ConstantName">
+            <summary>
+            Suggested constant name in Permissions.cs (e.g., "ProductsCreate").
+            </summary>
+        </member>
+        <member name="P:PermissionScanner.Core.Models.PermissionDefinition.Domain">
+            <summary>
+            Domain/category for grouping (e.g., "Products", "Inventory", "Approvals").
+            </summary>
+        </member>
+        <member name="T:PermissionScanner.Core.Models.PolicyDefinition">
+            <summary>
+            Represents an authorization policy definition.
+            </summary>
+        </member>
+        <member name="P:PermissionScanner.Core.Models.PolicyDefinition.PolicyName">
+            <summary>
+            Policy name constant (e.g., "RequireProductCreate").
+            </summary>
+        </member>
+        <member name="P:PermissionScanner.Core.Models.PolicyDefinition.RequiredPermission">
+            <summary>
+            Permission name that this policy requires (e.g., "products:create").
+            </summary>
+        </member>
+        <member name="P:PermissionScanner.Core.Models.PolicyDefinition.Description">
+            <summary>
+            Human-readable description of the policy.
+            </summary>
+        </member>
+        <member name="P:PermissionScanner.Core.Models.PolicyDefinition.Domain">
+            <summary>
+            Domain/category for grouping (e.g., "Products", "Inventory").
+            </summary>
+        </member>
+    </members>
+</doc>

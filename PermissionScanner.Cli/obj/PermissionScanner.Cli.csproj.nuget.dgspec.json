@@ -1,0 +1,168 @@
+{
+  "format": 1,
+  "restore": {
+    "/Users/yogi/projects/kronos-solution/krono-tools/permission-scanner/PermissionScanner.Cli/PermissionScanner.Cli.csproj": {}
+  },
+  "projects": {
+    "/Users/yogi/projects/kronos-solution/krono-tools/permission-scanner/PermissionScanner.Cli/PermissionScanner.Cli.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/yogi/projects/kronos-solution/krono-tools/permission-scanner/PermissionScanner.Cli/PermissionScanner.Cli.csproj",
+        "projectName": "PermissionScanner.Cli",
+        "projectPath": "/Users/yogi/projects/kronos-solution/krono-tools/permission-scanner/PermissionScanner.Cli/PermissionScanner.Cli.csproj",
+        "packagesPath": "/Users/yogi/.nuget/packages/",
+        "outputPath": "/Users/yogi/projects/kronos-solution/krono-tools/permission-scanner/PermissionScanner.Cli/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/yogi/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {},
+          "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-eng/nuget/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {
+              "/Users/yogi/projects/kronos-solution/krono-tools/permission-scanner/PermissionScanner.Core/PermissionScanner.Core.csproj": {
+                "projectPath": "/Users/yogi/projects/kronos-solution/krono-tools/permission-scanner/PermissionScanner.Core/PermissionScanner.Core.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "10.0.100"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "dependencies": {
+            "System.CommandLine": {
+              "target": "Package",
+              "version": "[2.0.0-beta4.22272.1, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[9.0.11, 9.0.11]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Host.osx-x64",
+              "version": "[9.0.11, 9.0.11]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[9.0.11, 9.0.11]"
+            }
+          ],
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/10.0.100/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "/Users/yogi/projects/kronos-solution/krono-tools/permission-scanner/PermissionScanner.Core/PermissionScanner.Core.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/yogi/projects/kronos-solution/krono-tools/permission-scanner/PermissionScanner.Core/PermissionScanner.Core.csproj",
+        "projectName": "PermissionScanner.Core",
+        "projectPath": "/Users/yogi/projects/kronos-solution/krono-tools/permission-scanner/PermissionScanner.Core/PermissionScanner.Core.csproj",
+        "packagesPath": "/Users/yogi/.nuget/packages/",
+        "outputPath": "/Users/yogi/projects/kronos-solution/krono-tools/permission-scanner/PermissionScanner.Core/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/yogi/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {},
+          "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-eng/nuget/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "10.0.100"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "dependencies": {
+            "Microsoft.CodeAnalysis.CSharp": {
+              "target": "Package",
+              "version": "[4.11.0, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[9.0.11, 9.0.11]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[9.0.11, 9.0.11]"
+            }
+          ],
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/10.0.100/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}
