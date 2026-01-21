@@ -13,18 +13,24 @@ public static class PermissionConstantsGenerator
     /// Generates the Permissions.cs file content with permission constants.
     /// Merges with existing constants to preserve manual additions.
     /// </summary>
-    public static string GenerateFileContent(List<PermissionDefinition> permissions, string? existingContent = null)
+    /// <param name="permissions">List of permissions to generate</param>
+    /// <param name="existingContent">Existing file content to merge with</param>
+    /// <param name="namespaceName">Namespace for the generated constants (default: KS.PlatformServices.Constants)</param>
+    public static string GenerateFileContent(List<PermissionDefinition> permissions, string? existingContent = null, string? namespaceName = null)
     {
         // Extract existing constants from file
         var existingConstants = ExtractExistingConstants(existingContent);
         
-        // Add default manual permissions if they don't exist
+        // Add default manual permissions if they don't exist (only for PlatformServices)
         var defaultPermissions = GetDefaultManualPermissions();
-        foreach (var defaultPerm in defaultPermissions)
+        if (namespaceName == null || namespaceName.Contains("PlatformServices"))
         {
-            if (!existingConstants.ContainsKey(defaultPerm.Key))
+            foreach (var defaultPerm in defaultPermissions)
             {
-                existingConstants[defaultPerm.Key] = defaultPerm.Value;
+                if (!existingConstants.ContainsKey(defaultPerm.Key))
+                {
+                    existingConstants[defaultPerm.Key] = defaultPerm.Value;
+                }
             }
         }
         
@@ -87,7 +93,9 @@ public static class PermissionConstantsGenerator
         
         var sb = new StringBuilder();
         
-        sb.AppendLine("namespace KS.PlatformServices.Constants;");
+        // Use provided namespace or default to PlatformServices
+        var ns = namespaceName ?? "KS.PlatformServices.Constants";
+        sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
         sb.AppendLine("/// <summary>");
         sb.AppendLine("/// Permission constants for the Intelligent Krono Application.");
@@ -264,11 +272,15 @@ public static class PermissionConstantsGenerator
 
     /// <summary>
     /// Converts discovered endpoints to permission definitions.
+    /// Also merges code-referenced permissions to ensure all referenced constants are generated.
     /// </summary>
-    public static List<PermissionDefinition> ConvertToPermissions(List<DiscoveredEndpoint> endpoints)
+    public static List<PermissionDefinition> ConvertToPermissions(
+        List<DiscoveredEndpoint> endpoints, 
+        List<PermissionDefinition>? codeReferencedPermissions = null)
     {
         var permissionMap = new Dictionary<string, PermissionDefinition>();
 
+        // First, add all endpoint-discovered permissions
         foreach (var endpoint in endpoints)
         {
             var key = endpoint.SuggestedPermission;
@@ -285,8 +297,14 @@ public static class PermissionConstantsGenerator
                     Endpoints = new List<string>(),
                     Description = GenerateDescription(endpoint.Resource, endpoint.Action)
                 };
-                
+
                 permissionMap[key] = permission;
+            }
+
+            // Track which services use this permission (for shared vs service-specific classification)
+            if (!string.IsNullOrWhiteSpace(endpoint.ServiceName))
+            {
+                permission.Services.Add(endpoint.ServiceName);
             }
 
             // Add endpoint reference
@@ -297,7 +315,46 @@ public static class PermissionConstantsGenerator
             }
         }
 
-        return permissionMap.Values.OrderBy(p => p.Domain).ThenBy(p => p.PermissionName).ToList();
+        // Then, merge code-referenced permissions (add missing ones, merge services for existing ones)
+        if (codeReferencedPermissions != null)
+        {
+            foreach (var codePerm in codeReferencedPermissions)
+            {
+                // Check if permission already exists by permission name
+                if (permissionMap.TryGetValue(codePerm.PermissionName, out var existing))
+                {
+                    // Merge services
+                    foreach (var service in codePerm.Services)
+                    {
+                        existing.Services.Add(service);
+                    }
+                    // Merge endpoints/references
+                    foreach (var endpoint in codePerm.Endpoints)
+                    {
+                        if (!existing.Endpoints.Contains(endpoint))
+                        {
+                            existing.Endpoints.Add(endpoint);
+                        }
+                    }
+                }
+                else
+                {
+                    // Add new permission from code reference
+                    permissionMap[codePerm.PermissionName] = codePerm;
+                }
+            }
+        }
+
+        // Classify permissions into shared vs service-specific based on usage
+        foreach (var permission in permissionMap.Values)
+        {
+            permission.Scope = ClassifyScope(permission);
+        }
+
+        return permissionMap.Values
+            .OrderBy(p => p.Domain)
+            .ThenBy(p => p.PermissionName)
+            .ToList();
     }
 
     private static string GenerateDescription(string resource, string action)
@@ -315,5 +372,46 @@ public static class PermissionConstantsGenerator
         };
 
         return $"{actionName} {resourceName}";
+    }
+
+    /// <summary>
+    /// Classifies permission scope based on resource naming and service usage.
+    /// </summary>
+    /// <remarks>
+    /// Rules:
+    /// 1. Platform-level resources are always shared:
+    ///    - resource starts with \"tenant-\", \"platform\", \"rbac\", \"permissions\", or \"roles\"
+    /// 2. If a permission is used by PlatformServices (from code references) → shared
+    /// 3. If a permission is used by more than one service → shared
+    /// 4. Otherwise → service-specific
+    /// </remarks>
+    private static string ClassifyScope(PermissionDefinition permission)
+    {
+        var resource = permission.Resource ?? string.Empty;
+
+        // Rule 1: Platform-level resources
+        if (resource.StartsWith("tenant-", StringComparison.OrdinalIgnoreCase) ||
+            resource.StartsWith("platform", StringComparison.OrdinalIgnoreCase) ||
+            resource.StartsWith("rbac", StringComparison.OrdinalIgnoreCase) ||
+            resource.StartsWith("permissions", StringComparison.OrdinalIgnoreCase) ||
+            resource.StartsWith("roles", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Shared";
+        }
+
+        // Rule 2: Used by PlatformServices (code-referenced from PlatformServices namespace)
+        if (permission.Services.Contains("PlatformServices", StringComparer.OrdinalIgnoreCase))
+        {
+            return "Shared";
+        }
+
+        // Rule 3: Cross-service usage
+        if (permission.Services.Count > 1)
+        {
+            return "Shared";
+        }
+
+        // Default: service-specific
+        return "ServiceSpecific";
     }
 }

@@ -12,14 +12,17 @@ public static class PolicyConstantsGenerator
     /// <summary>
     /// Generates the AuthorizationPolicies.cs file content with policy constants.
     /// </summary>
-    public static string GenerateFileContent(List<PolicyDefinition> policies, string? existingContent = null)
+    /// <param name="policies">List of policies to generate</param>
+    /// <param name="existingContent">Existing file content to merge with</param>
+    /// <param name="namespaceName">Namespace for the generated constants (default: KS.PlatformServices.Constants)</param>
+    public static string GenerateFileContent(List<PolicyDefinition> policies, string? existingContent = null, string? namespaceName = null)
     {
         var sb = new StringBuilder();
         
         // Parse existing content to preserve manual policies (if exists)
         var manualPolicies = ExtractManualPolicies(existingContent ?? string.Empty);
         
-        // Always merge default system policies to ensure all required policies are present
+        // Always merge default system policies to ensure all required policies are present (only for PlatformServices)
         var defaultPolicies = GetDefaultSystemPolicies();
         var existingPolicyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         
@@ -53,22 +56,30 @@ public static class PolicyConstantsGenerator
             }
         }
         
-        // Add default policies that don't already exist
-        foreach (var defaultPolicy in defaultPolicies)
+        // Add default policies that don't already exist (only for PlatformServices)
+        if (namespaceName == null || namespaceName.Contains("PlatformServices"))
         {
-            var defaultPolicyName = ExtractPolicyNameFromConstant(defaultPolicy.Trim());
-            if (defaultPolicyName != null && !existingPolicyNames.Contains(defaultPolicyName))
+            foreach (var defaultPolicy in defaultPolicies)
             {
-                filteredManualPolicies.Add(defaultPolicy);
+                var defaultPolicyName = ExtractPolicyNameFromConstant(defaultPolicy.Trim());
+                if (defaultPolicyName != null && !existingPolicyNames.Contains(defaultPolicyName))
+                {
+                    filteredManualPolicies.Add(defaultPolicy);
+                }
             }
         }
         
         manualPolicies = filteredManualPolicies;
         
-        // Validate existing policies against naming conventions
-        ValidateExistingPolicies(existingContent ?? string.Empty);
+        // Validate existing policies against naming conventions (only for PlatformServices)
+        if (namespaceName == null || namespaceName.Contains("PlatformServices"))
+        {
+            ValidateExistingPolicies(existingContent ?? string.Empty);
+        }
         
-        sb.AppendLine("namespace KS.PlatformServices.Constants;");
+        // Use provided namespace or default to PlatformServices
+        var ns = namespaceName ?? "KS.PlatformServices.Constants";
+        sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
         sb.AppendLine("/// <summary>");
         sb.AppendLine("/// Constants for authorization policies used in the application.");
@@ -307,9 +318,12 @@ public static class PolicyConstantsGenerator
 
     /// <summary>
     /// Converts permission definitions to policy definitions.
+    /// Also merges code-referenced policies to ensure all referenced constants are generated.
     /// Handles collisions by making policy names more specific or combining permissions.
     /// </summary>
-    public static List<PolicyDefinition> ConvertToPolicies(List<PermissionDefinition> permissions)
+    public static List<PolicyDefinition> ConvertToPolicies(
+        List<PermissionDefinition> permissions,
+        List<PolicyDefinition>? codeReferencedPolicies = null)
     {
         // Generate policies and handle collisions
         var policyMap = new Dictionary<string, PolicyDefinition>();
@@ -348,6 +362,25 @@ public static class PolicyConstantsGenerator
                     };
                 }
                 policyNameCollisions[policyName].Add(permission);
+            }
+        }
+
+        // Merge code-referenced policies (add missing ones)
+        if (codeReferencedPolicies != null)
+        {
+            foreach (var codePolicy in codeReferencedPolicies)
+            {
+                // If policy doesn't exist, add it
+                if (!policyMap.ContainsKey(codePolicy.PolicyName))
+                {
+                    policyMap[codePolicy.PolicyName] = codePolicy;
+                }
+                // If it exists but with different permission, prefer the code-referenced one (it's explicit)
+                else if (policyMap[codePolicy.PolicyName].RequiredPermission != codePolicy.RequiredPermission)
+                {
+                    // Keep the code-referenced policy as it's explicitly used
+                    policyMap[codePolicy.PolicyName] = codePolicy;
+                }
             }
         }
         

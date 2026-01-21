@@ -48,20 +48,41 @@ class Program
         {
             IsRequired = false
         };
+        var scopeOption = new Option<string>(
+            aliases: new[] { "--scope" },
+            description: "Scope for generation: 'shared' (PlatformServices only), 'all' (hybrid - shared + service-specific), or service name (e.g., 'ProductService')")
+        {
+            IsRequired = false
+        };
+        scopeOption.SetDefaultValue("all");
         
         generateCommand.AddOption(solutionOption);
         generateCommand.AddOption(platformServicesOption);
         generateCommand.AddOption(updateFilesOption);
-        generateCommand.SetHandler(GenerateCommand.ExecuteAsync, solutionOption, platformServicesOption, updateFilesOption);
+        generateCommand.AddOption(scopeOption);
+        generateCommand.SetHandler(GenerateCommand.ExecuteAsync, solutionOption, platformServicesOption, updateFilesOption, scopeOption);
 
         // Validate command
         var validateCommand = new Command("validate", "Validate that all endpoints have authorization policies");
         validateCommand.AddOption(solutionOption);
         validateCommand.SetHandler(ValidateCommand.ExecuteAsync, solutionOption);
 
+        // Validate alignment command
+        var validateAlignmentCommand = new Command("validate-alignment", "Validate alignment between existing and generated permissions/policies");
+        var platformServicesOptionForValidation = new Option<string>(
+            aliases: new[] { "--platform-services", "-p" },
+            description: "Path to PlatformServices project directory")
+        {
+            IsRequired = true
+        };
+        validateAlignmentCommand.AddOption(solutionOption);
+        validateAlignmentCommand.AddOption(platformServicesOptionForValidation);
+        validateAlignmentCommand.SetHandler(ValidateAlignmentCommand.ExecuteAsync, solutionOption, platformServicesOptionForValidation);
+
         rootCommand.AddCommand(scanCommand);
         rootCommand.AddCommand(generateCommand);
         rootCommand.AddCommand(validateCommand);
+        rootCommand.AddCommand(validateAlignmentCommand);
 
         return await rootCommand.InvokeAsync(args);
     }

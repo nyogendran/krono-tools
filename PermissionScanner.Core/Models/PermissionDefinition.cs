@@ -21,6 +21,19 @@ public class PermissionDefinition
     public string Action { get; set; } = string.Empty;
 
     /// <summary>
+    /// Set of microservices that use this permission (e.g., "ProductService", "SalesService").
+    /// Used for classification into shared vs service-specific permissions.
+    /// </summary>
+    public HashSet<string> Services { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Classification scope for this permission:
+    /// - "Shared"          → Platform-level / cross-service permission
+    /// - "ServiceSpecific" → Permission only used by a single service
+    /// </summary>
+    public string Scope { get; set; } = "ServiceSpecific";
+
+    /// <summary>
     /// Human-readable description of the permission.
     /// </summary>
     public string Description { get; set; } = string.Empty;
