@@ -273,6 +273,7 @@ public static class PermissionConstantsGenerator
     /// <summary>
     /// Converts discovered endpoints to permission definitions.
     /// Also merges code-referenced permissions to ensure all referenced constants are generated.
+    /// Filters out "unknown" permissions as they don't represent real resources.
     /// </summary>
     public static List<PermissionDefinition> ConvertToPermissions(
         List<DiscoveredEndpoint> endpoints, 
@@ -280,9 +281,15 @@ public static class PermissionConstantsGenerator
     {
         var permissionMap = new Dictionary<string, PermissionDefinition>();
 
-        // First, add all endpoint-discovered permissions
+        // First, add all endpoint-discovered permissions (excluding unknown)
         foreach (var endpoint in endpoints)
         {
+            // Skip endpoints that result in "unknown" resource
+            if (endpoint.Resource.Equals("unknown", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            
             var key = endpoint.SuggestedPermission;
             
             if (!permissionMap.TryGetValue(key, out var permission))
@@ -316,10 +323,17 @@ public static class PermissionConstantsGenerator
         }
 
         // Then, merge code-referenced permissions (add missing ones, merge services for existing ones)
+        // Filter out "unknown" permissions from code-referenced as well
         if (codeReferencedPermissions != null)
         {
             foreach (var codePerm in codeReferencedPermissions)
             {
+                // Skip "unknown" permissions
+                if (codePerm.Resource.Equals("unknown", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                
                 // Check if permission already exists by permission name
                 if (permissionMap.TryGetValue(codePerm.PermissionName, out var existing))
                 {

@@ -89,11 +89,77 @@ public static class PermissionNameGenerator
         
         if (resourceParts.Count == 0)
         {
+            // Fallback: Try to extract resource from route using fallback logic
+            var fallbackResource = ExtractFallbackResource(routeTemplate);
+            if (!string.IsNullOrEmpty(fallbackResource))
+            {
+                return fallbackResource;
+            }
+            
             return "unknown";
         }
         
         // Join with colons for nested resources (e.g., "products:variants")
         return string.Join(":", resourceParts);
+    }
+
+    /// <summary>
+    /// Fallback method to extract resource name when primary extraction fails.
+    /// Tries to find the last meaningful segment in the route that could be a resource.
+    /// </summary>
+    /// <param name="routeTemplate">Route template to analyze</param>
+    /// <returns>Suggested resource name, or null if none can be determined</returns>
+    private static string? ExtractFallbackResource(string routeTemplate)
+    {
+        // Remove leading/trailing slashes and split
+        var parts = routeTemplate.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        
+        // Known path prefixes that are not resources
+        var pathPrefixes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "api", "v1", "v2", "admin", "rbac", "internal", "public", "private"
+        };
+        
+        // Try to find the last meaningful segment (working backwards)
+        for (int i = parts.Length - 1; i >= 0; i--)
+        {
+            var part = parts[i];
+            
+            // Skip if it's a parameter placeholder
+            if (part.StartsWith("{") && part.EndsWith("}"))
+                continue;
+                
+            // Skip if it's a known prefix
+            if (part.Equals("api", StringComparison.OrdinalIgnoreCase) ||
+                pathPrefixes.Contains(part))
+                continue;
+                
+            // Skip version parts (e.g., "v1", "v2", "v{version:apiVersion}")
+            // But NOT words that happen to start with "v" like "variants", "vendors", etc.
+            if ((part.Length <= 3 && part.StartsWith("v", StringComparison.OrdinalIgnoreCase)) ||
+                part.Contains("{version}", StringComparison.OrdinalIgnoreCase))
+                continue;
+            
+            // This looks like a resource - return it
+            // Also check if there's a parent resource before it (for nested resources)
+            if (i > 0)
+            {
+                var parentPart = parts[i - 1];
+                // If parent is not a prefix/parameter, it might be a nested resource
+                if (!parentPart.StartsWith("{") && 
+                    !parentPart.EndsWith("}") &&
+                    !parentPart.Equals("api", StringComparison.OrdinalIgnoreCase) &&
+                    !parentPart.StartsWith("v", StringComparison.OrdinalIgnoreCase) &&
+                    !pathPrefixes.Contains(parentPart))
+                {
+                    return $"{parentPart}:{part}";
+                }
+            }
+            
+            return part;
+        }
+        
+        return null;
     }
 
     /// <summary>
@@ -148,6 +214,36 @@ public static class PermissionNameGenerator
             "DELETE" => "delete",
             _ => "unknown"
         };
+    }
+
+    /// <summary>
+    /// Suggests a permission for an endpoint that resulted in "unknown" resource.
+    /// Uses fallback extraction logic to suggest what the permission should be.
+    /// </summary>
+    /// <param name="httpMethod">HTTP method (GET, POST, PUT, PATCH, DELETE).</param>
+    /// <param name="routeTemplate">Route template that resulted in "unknown" resource.</param>
+    /// <returns>Suggested permission information, or null if no suggestion can be made.</returns>
+    public static (string Resource, string Action, string PermissionName, string ConstantName)? SuggestPermissionForUnknown(
+        string httpMethod,
+        string routeTemplate)
+    {
+        // Try fallback extraction
+        var fallbackResource = ExtractFallbackResource(routeTemplate);
+        if (string.IsNullOrEmpty(fallbackResource))
+        {
+            return null; // Can't suggest anything
+        }
+        
+        // Extract action from HTTP method
+        var action = ExtractAction(httpMethod, routeTemplate);
+        
+        // Generate permission name
+        var permissionName = $"{fallbackResource}:{action}";
+        
+        // Generate constant name
+        var constantName = GenerateConstantName(permissionName);
+        
+        return (fallbackResource, action, permissionName, constantName);
     }
 
     /// <summary>

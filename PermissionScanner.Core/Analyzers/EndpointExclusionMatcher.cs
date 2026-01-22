@@ -10,6 +10,10 @@ public class EndpointExclusionMatcher
 {
     private readonly List<string> _defaultExclusions = new()
     {
+        // Root redirect endpoints (public, no permissions needed)
+        "^/$",
+        "/",
+        
         // Health check endpoints (various patterns)
         "/health",
         "/health/*",

@@ -30,6 +30,85 @@ public class GenerateCommand
             // Important: Code-referenced permissions with PlatformServices scope should be added to shared
             var allPermissions = PermissionConstantsGenerator.ConvertToPermissions(endpoints, codeReferencedPermissions);
             
+            // Check for and warn about filtered "unknown" permissions
+            // Exclude root endpoints (they're public redirects and correctly classified as "unknown")
+            var exclusionMatcher = new EndpointExclusionMatcher();
+            var unknownEndpoints = endpoints
+                .Where(e => e.Resource.Equals("unknown", StringComparison.OrdinalIgnoreCase))
+                .Where(e => !exclusionMatcher.IsExcluded(e.RouteTemplate))  // Exclude public endpoints
+                .ToList();
+            if (unknownEndpoints.Any())
+            {
+                Console.WriteLine();
+                Console.WriteLine($"⚠️  Warning: Found {unknownEndpoints.Count} endpoint(s) with 'unknown' resource (filtered out):");
+                
+                var endpointsWithSuggestions = new List<(DiscoveredEndpoint Endpoint, string SuggestedPermission, string SuggestedConstant)>();
+                var endpointsWithoutSuggestions = new List<DiscoveredEndpoint>();
+                
+                foreach (var endpoint in unknownEndpoints)
+                {
+                    var suggestion = PermissionNameGenerator.SuggestPermissionForUnknown(
+                        endpoint.HttpMethod, 
+                        endpoint.RouteTemplate);
+                    
+                    if (suggestion.HasValue)
+                    {
+                        endpointsWithSuggestions.Add((
+                            endpoint, 
+                            suggestion.Value.PermissionName, 
+                            suggestion.Value.ConstantName));
+                    }
+                    else
+                    {
+                        endpointsWithoutSuggestions.Add(endpoint);
+                    }
+                }
+                
+                // Show endpoints with suggestions
+                if (endpointsWithSuggestions.Any())
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("   💡 Suggested permissions (review and add manually if correct):");
+                    foreach (var (endpoint, suggestedPermission, suggestedConstant) in endpointsWithSuggestions.Take(10))
+                    {
+                        Console.WriteLine($"   - {endpoint.HttpMethod} {endpoint.RouteTemplate}");
+                        Console.WriteLine($"     → Suggested: {suggestedPermission} ({suggestedConstant})");
+                    }
+                    if (endpointsWithSuggestions.Count > 10)
+                    {
+                        Console.WriteLine($"   ... and {endpointsWithSuggestions.Count - 10} more with suggestions");
+                    }
+                }
+                
+                // Show endpoints without suggestions
+                if (endpointsWithoutSuggestions.Any())
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("   ⚠️  Endpoints without suggestions (may not need permissions):");
+                    foreach (var endpoint in endpointsWithoutSuggestions.Take(5))
+                    {
+                        Console.WriteLine($"   - {endpoint.HttpMethod} {endpoint.RouteTemplate}");
+                    }
+                    if (endpointsWithoutSuggestions.Count > 5)
+                    {
+                        Console.WriteLine($"   ... and {endpointsWithoutSuggestions.Count - 5} more");
+                    }
+                }
+                
+                Console.WriteLine();
+                Console.WriteLine("   📝 Next steps:");
+                if (endpointsWithSuggestions.Any())
+                {
+                    Console.WriteLine("   1. Review suggested permissions above");
+                    Console.WriteLine("   2. If correct, manually add them to Permissions.cs");
+                    Console.WriteLine("   3. If incorrect, improve route template or extraction logic");
+                }
+                if (endpointsWithoutSuggestions.Any())
+                {
+                    Console.WriteLine("   • Endpoints without suggestions may be public (health checks, redirects)");
+                }
+            }
+            
             // Ensure PlatformServices-scoped code-referenced permissions are marked as Shared
             foreach (var perm in allPermissions)
             {

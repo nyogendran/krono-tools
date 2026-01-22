@@ -178,12 +178,110 @@ class Program
         testPhase1Command.AddOption(platformServicesOptionForTest);
         testPhase1Command.SetHandler(TestPhase1Command.ExecuteAsync, solutionOption, platformServicesOptionForTest);
 
+        // Migrate command
+        var migrateCommand = new Command("migrate", "Generate FluentMigrator migration files for seeding permissions");
+        var platformServicesOptionForMigrate = new Option<string>(
+            aliases: new[] { "--platform-services", "-p" },
+            description: "Path to PlatformServices project directory")
+        {
+            IsRequired = true
+        };
+        var migrationServiceOption = new Option<string>(
+            aliases: new[] { "--migration-service", "-m" },
+            description: "Path to MigrationService project directory")
+        {
+            IsRequired = true
+        };
+        var dryRunOptionForMigrate = new Option<bool>(
+            aliases: new[] { "--dry-run" },
+            description: "Preview migration files without generating them")
+        {
+            IsRequired = false
+        };
+        var generateOption = new Option<bool>(
+            aliases: new[] { "--generate" },
+            description: "Generate migration files (required to actually create files)")
+        {
+            IsRequired = false
+        };
+        var generateRoleAssignmentsOption = new Option<bool>(
+            aliases: new[] { "--generate-role-assignments" },
+            description: "Also generate role assignment migration files")
+        {
+            IsRequired = false
+        };
+        
+        migrateCommand.AddOption(solutionOption);
+        migrateCommand.AddOption(platformServicesOptionForMigrate);
+        migrateCommand.AddOption(migrationServiceOption);
+        migrateCommand.AddOption(dryRunOptionForMigrate);
+        migrateCommand.AddOption(generateOption);
+        migrateCommand.AddOption(generateRoleAssignmentsOption);
+        migrateCommand.SetHandler(MigrateCommand.ExecuteAsync, solutionOption, platformServicesOptionForMigrate, migrationServiceOption, dryRunOptionForMigrate, generateOption, generateRoleAssignmentsOption);
+
+        // Validate-database command
+        var validateDatabaseCommand = new Command("validate-database", "Validate permissions by comparing constants, migrations, and database");
+        var platformServicesOptionForValidateDb = new Option<string>(
+            aliases: new[] { "--platform-services", "-p" },
+            description: "Path to PlatformServices Constants directory")
+        {
+            IsRequired = true
+        };
+        var migrationServiceOptionForValidateDb = new Option<string>(
+            aliases: new[] { "--migration-service", "-m" },
+            description: "Path to MigrationService project directory (optional, for migration validation)")
+        {
+            IsRequired = false
+        };
+        var connectionStringOption = new Option<string>(
+            aliases: new[] { "--connection-string", "-c" },
+            description: "PostgreSQL connection string (or use DB_CONNECTION_STRING env var)")
+        {
+            IsRequired = false
+        };
+        var schemaOption = new Option<string>(
+            aliases: new[] { "--schema", "--db-schema" },
+            description: "Database schema name (default: extracted from connection string or 'app_schema')")
+        {
+            IsRequired = false
+        };
+        var validateMigrationsOption = new Option<bool>(
+            aliases: new[] { "--validate-migrations" },
+            description: "Also validate migration files against database")
+        {
+            IsRequired = false
+        };
+        var findOrphanedOption = new Option<bool>(
+            aliases: new[] { "--find-orphaned" },
+            description: "Find orphaned permissions in database (not in constants or migrations)")
+        {
+            IsRequired = false
+        };
+        var fixSuggestionsOption = new Option<bool>(
+            aliases: new[] { "--fix-suggestions" },
+            description: "Show SQL suggestions to fix discrepancies")
+        {
+            IsRequired = false
+        };
+        
+        validateDatabaseCommand.AddOption(solutionOption);
+        validateDatabaseCommand.AddOption(platformServicesOptionForValidateDb);
+        validateDatabaseCommand.AddOption(migrationServiceOptionForValidateDb);
+        validateDatabaseCommand.AddOption(connectionStringOption);
+        validateDatabaseCommand.AddOption(schemaOption);
+        validateDatabaseCommand.AddOption(validateMigrationsOption);
+        validateDatabaseCommand.AddOption(findOrphanedOption);
+        validateDatabaseCommand.AddOption(fixSuggestionsOption);
+        validateDatabaseCommand.SetHandler(ValidateDatabaseCommand.ExecuteAsync, solutionOption, platformServicesOptionForValidateDb, migrationServiceOptionForValidateDb, connectionStringOption, schemaOption, validateMigrationsOption, findOrphanedOption, fixSuggestionsOption);
+
         rootCommand.AddCommand(scanCommand);
         rootCommand.AddCommand(generateCommand);
         rootCommand.AddCommand(validateCommand);
         rootCommand.AddCommand(validateAlignmentCommand);
         rootCommand.AddCommand(applyCommand);
         rootCommand.AddCommand(testPhase1Command);
+        rootCommand.AddCommand(migrateCommand);
+        rootCommand.AddCommand(validateDatabaseCommand);
 
         return await rootCommand.InvokeAsync(args);
     }
