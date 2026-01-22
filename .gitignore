@@ -1,0 +1,7 @@
+# .NET build artifacts
+bin/
+obj/
+*.dll
+*.pdb
+*.xml
+*.sourcelink.json
