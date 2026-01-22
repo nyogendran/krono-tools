@@ -24,7 +24,9 @@ public class ApplyCommand
         bool migrateApiConstants,
         bool applyPoliciesToEndpoints,
         string? excludePaths,
-        string? defaultPolicy)
+        string? defaultPolicy,
+        bool detectMissingPolicies,
+        bool autoRegisterPolicies)
     {
         try
         {
@@ -282,6 +284,125 @@ public class ApplyCommand
                 }
             }
 
+            // Detect missing policy registrations if requested
+            var policyRegistrationFixes = new List<FileFix>();
+            if (detectMissingPolicies || autoRegisterPolicies)
+            {
+                Console.WriteLine("🔍 Analyzing for missing authorization policy registrations...");
+                Console.WriteLine();
+
+                var policyAnalyzer = new PolicyRegistrationAnalyzer();
+                var analysisResult = await policyAnalyzer.AnalyzeAsync(solutionPath);
+
+                if (analysisResult.MissingRegistrations.Any())
+                {
+                    Console.WriteLine($"⚠️  Found {analysisResult.MissingRegistrations.Count} missing policy registration(s):");
+                    Console.WriteLine();
+                    
+                    // Group by service for better reporting
+                    var byService = analysisResult.MissingRegistrations
+                        .GroupBy(m => m.ServiceName)
+                        .OrderBy(g => g.Key)
+                        .ToList();
+                    
+                    // Show summary first
+                    Console.WriteLine("📊 Summary by Service:");
+                    foreach (var serviceGroup in byService)
+                    {
+                        var serviceName = serviceGroup.Key;
+                        var count = serviceGroup.Count();
+                        var policiesWithPermissions = serviceGroup.Count(m => !string.IsNullOrEmpty(m.PermissionName));
+                        var policiesWithoutPermissions = count - policiesWithPermissions;
+                        
+                        Console.WriteLine($"   {serviceName}: {count} missing ({policiesWithPermissions} with permissions, {policiesWithoutPermissions} without)");
+                    }
+                    Console.WriteLine();
+
+                    var generator = new PolicyRegistrationGenerator();
+
+                    // Group by Program.cs file
+                    var missingByProgramFile = analysisResult.MissingRegistrations
+                        .GroupBy(m => m.ProgramCsPath)
+                        .ToList();
+
+                    foreach (var programGroup in missingByProgramFile)
+                    {
+                        var programFilePath = programGroup.Key;
+                        var missingPolicies = programGroup.ToList();
+                        var serviceName = missingPolicies.First().ServiceName;
+
+                        Console.WriteLine($"📄 {GetRelativePath(programFilePath, solutionPath)} ({serviceName}):");
+                        foreach (var missing in missingPolicies)
+                        {
+                            Console.WriteLine($"   - {missing.PolicyName} (used {missing.UsageCount} time(s))");
+                            if (!string.IsNullOrEmpty(missing.PermissionName))
+                            {
+                                Console.WriteLine($"     Permission: {missing.PermissionName}");
+                            }
+                        }
+                        Console.WriteLine();
+
+                        if (autoRegisterPolicies)
+                        {
+                            // Generate registration code
+                            var registrationCode = generator.GenerateAllPolicyRegistrations(missingPolicies, serviceName, solutionPath);
+                            
+                            // Read Program.cs to find insertion point
+                            var programContent = await File.ReadAllTextAsync(programFilePath);
+                            var insertionPoint = generator.FindInsertionPoint(programContent);
+
+                            if (insertionPoint > 0)
+                            {
+                                policyRegistrationFixes.Add(new FileFix
+                                {
+                                    FilePath = programFilePath,
+                                    LineNumber = 0, // Will be calculated from insertion point
+                                    Type = FixType.PolicyRegistration,
+                                    Description = $"Register {missingPolicies.Count} missing authorization policy/policies",
+                                    OldCode = null,
+                                    NewCode = registrationCode + Environment.NewLine,
+                                    SpanStart = insertionPoint,
+                                    SpanLength = 0
+                                });
+                            }
+                            else if (insertionPoint < 0)
+                            {
+                                // Negative value indicates we need to create AddAuthorization block first
+                                var insertPos = -insertionPoint;
+                                var addAuthorizationBlock = $"{Environment.NewLine}{Environment.NewLine}// Configure authorization policies{Environment.NewLine}builder.Services.AddAuthorization(options =>{Environment.NewLine}{{{Environment.NewLine}    // Authorization policies will be registered here by the Permission Scanner Tool{Environment.NewLine}}});";
+                                var fullCode = addAuthorizationBlock + Environment.NewLine + registrationCode + Environment.NewLine;
+                                
+                                policyRegistrationFixes.Add(new FileFix
+                                {
+                                    FilePath = programFilePath,
+                                    LineNumber = 0,
+                                    Type = FixType.PolicyRegistration,
+                                    Description = $"Create AddAuthorization block and register {missingPolicies.Count} missing authorization policy/policies",
+                                    OldCode = null,
+                                    NewCode = fullCode,
+                                    SpanStart = insertPos,
+                                    SpanLength = 0
+                                });
+                            }
+                        }
+                    }
+
+                    if (!autoRegisterPolicies)
+                    {
+                        Console.WriteLine("💡 Tip: Use --auto-register-policies to automatically generate registration code.");
+                        Console.WriteLine();
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("✅ All authorization policies are properly registered.");
+                    Console.WriteLine();
+                }
+            }
+
+            // Add policy registration fixes to the main fixes list
+            fixes.AddRange(policyRegistrationFixes);
+
             // Group fixes by file
             var fixesByFile = fixes.GroupBy(f => f.FilePath).ToList();
 
@@ -323,7 +444,7 @@ public class ApplyCommand
                 return 0;
             }
 
-            if (!applyEndpoints && !applyPolicies && !migrateApiConstants && !applyPoliciesToEndpoints)
+            if (!applyEndpoints && !applyPolicies && !migrateApiConstants && !applyPoliciesToEndpoints && !autoRegisterPolicies)
             {
                 Console.WriteLine("⚠️  No action flags specified. Use --apply-endpoints, --apply-policies, --apply-policies-to-endpoints, and/or --migrate-api-constants to apply fixes.");
                 return 1;
@@ -343,6 +464,7 @@ public class ApplyCommand
                     ((applyEndpoints || applyPoliciesToEndpoints) && f.Type == FixType.Endpoint) ||
                     (applyPoliciesToEndpoints && f.Type == FixType.UsingStatementInsertion) ||
                     (applyPolicies && f.Type == FixType.PolicyRegistration) ||
+                    (autoRegisterPolicies && f.Type == FixType.PolicyRegistration && f.Description.Contains("Register")) ||
                     (migrateApiConstants && f.Description.Contains("Migrate ApiConstants"))).ToList();
 
                 if (!fixesToApply.Any())

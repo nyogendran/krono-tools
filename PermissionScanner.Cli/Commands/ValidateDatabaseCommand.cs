@@ -18,7 +18,11 @@ public class ValidateDatabaseCommand
         string? schemaName,
         bool validateMigrations,
         bool findOrphaned,
-        bool fixSuggestions)
+        bool fixSuggestions,
+        bool autoGenerateConstants,
+        bool findStringLiterals,
+        bool autoFixLiterals,
+        bool dryRun)
     {
         try
         {
@@ -97,6 +101,21 @@ public class ValidateDatabaseCommand
 
             // Step 8: Generate report
             GenerateValidationReport(result, findOrphaned, fixSuggestions);
+
+            // Step 9: Constants alignment (if requested)
+            if (autoGenerateConstants || findStringLiterals || autoFixLiterals)
+            {
+                await HandleConstantsAlignmentAsync(
+                    result,
+                    databasePermissions,
+                    allConstantsPermissions,
+                    platformServicesPath,
+                    solutionPath,
+                    autoGenerateConstants,
+                    findStringLiterals,
+                    autoFixLiterals,
+                    dryRun);
+            }
 
             // Return exit code based on discrepancies
             return result.Summary.DiscrepanciesCount > 0 ? 1 : 0;
@@ -315,5 +334,304 @@ public class ValidateDatabaseCommand
             }
             Console.WriteLine($"   ) AND is_system_permission = true;");
         }
+    }
+
+    private static async Task HandleConstantsAlignmentAsync(
+        PermissionValidationResult result,
+        List<DatabasePermission> databasePermissions,
+        List<PermissionDefinition> existingConstants,
+        string platformServicesPath,
+        string solutionPath,
+        bool autoGenerateConstants,
+        bool findStringLiterals,
+        bool autoFixLiterals,
+        bool dryRun)
+    {
+        Console.WriteLine();
+        Console.WriteLine("🔧 Constants Alignment");
+        Console.WriteLine("======================");
+        Console.WriteLine();
+
+        if (dryRun)
+        {
+            Console.WriteLine("⚠️  DRY-RUN MODE: No files will be modified");
+            Console.WriteLine();
+        }
+
+        // Get missing permissions (in database but not in constants)
+        var missingPermissionNames = result.MissingInConstants;
+        if (missingPermissionNames.Count == 0)
+        {
+            Console.WriteLine("✅ All database permissions are already in constants");
+            Console.WriteLine();
+            return;
+        }
+
+        var missingDbPermissions = databasePermissions
+            .Where(p => missingPermissionNames.Contains(p.PermissionName, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+
+        Console.WriteLine($"Found {missingPermissionNames.Count} permissions in database not in constants:");
+        foreach (var perm in missingPermissionNames.Take(10))
+        {
+            Console.WriteLine($"  - {perm}");
+        }
+        if (missingPermissionNames.Count > 10)
+        {
+            Console.WriteLine($"  ... and {missingPermissionNames.Count - 10} more");
+        }
+        Console.WriteLine();
+
+        // Generate constants
+        if (autoGenerateConstants)
+        {
+            await GenerateConstantsAsync(
+                missingDbPermissions,
+                existingConstants,
+                platformServicesPath,
+                dryRun);
+        }
+
+        // Find string literals
+        if (findStringLiterals || autoFixLiterals)
+        {
+            await FindAndReplaceStringLiteralsAsync(
+                solutionPath,
+                missingPermissionNames,
+                autoFixLiterals,
+                dryRun);
+        }
+    }
+
+    private static async Task GenerateConstantsAsync(
+        List<DatabasePermission> missingPermissions,
+        List<PermissionDefinition> existingConstants,
+        string platformServicesPath,
+        bool dryRun)
+    {
+        Console.WriteLine("📝 Generating Constants");
+        Console.WriteLine("-----------------------");
+        Console.WriteLine();
+
+        var alignmentService = new ConstantsAlignmentService();
+        var constants = alignmentService.GenerateConstantsForMissingPermissions(
+            missingPermissions,
+            existingConstants);
+
+        if (constants.Count == 0)
+        {
+            Console.WriteLine("✅ No constants to generate");
+            Console.WriteLine();
+            return;
+        }
+
+        var constantsCode = alignmentService.GenerateConstantsCode(constants);
+
+        Console.WriteLine($"Would generate {constants.Count} constants:");
+        Console.WriteLine();
+        Console.WriteLine("```csharp");
+        Console.WriteLine(constantsCode);
+        Console.WriteLine("```");
+        Console.WriteLine();
+
+        if (!dryRun)
+        {
+            var permissionsFilePath = Path.Combine(platformServicesPath, "Permissions.cs");
+            if (!File.Exists(permissionsFilePath))
+            {
+                Console.WriteLine($"❌ Error: Permissions.cs not found at {permissionsFilePath}");
+                return;
+            }
+
+            // Read existing file
+            var existingContent = await File.ReadAllTextAsync(permissionsFilePath);
+
+            // Extract existing constant names from the file to avoid duplicates
+            var existingConstantNames = ExtractConstantNamesFromFile(existingContent);
+            
+            // Filter out constants that already exist
+            var constantsToAdd = constants
+                .Where(c => !existingConstantNames.Contains(c.ConstantName, StringComparer.OrdinalIgnoreCase))
+                .ToList();
+
+            if (constantsToAdd.Count == 0)
+            {
+                Console.WriteLine("✅ All constants already exist in Permissions.cs");
+                Console.WriteLine();
+                return;
+            }
+
+            if (constantsToAdd.Count < constants.Count)
+            {
+                var skippedCount = constants.Count - constantsToAdd.Count;
+                Console.WriteLine($"⚠️  Skipping {skippedCount} constant(s) that already exist");
+                Console.WriteLine();
+            }
+
+            // Generate code only for new constants
+            var constantsCodeToAdd = alignmentService.GenerateConstantsCode(constantsToAdd);
+
+            // Find insertion point (before the closing brace of the class)
+            // Look for the last closing brace that closes the class (should be the last } in the file)
+            var lastClosingBrace = existingContent.LastIndexOf('}');
+            if (lastClosingBrace == -1)
+            {
+                Console.WriteLine("❌ Error: Could not find closing brace in Permissions.cs");
+                return;
+            }
+
+            // Find the start of the line containing the closing brace
+            // Work backwards from the closing brace to find the previous newline
+            var lineStart = existingContent.LastIndexOf('\n', lastClosingBrace);
+            if (lineStart == -1)
+            {
+                // No newline found before the closing brace, this shouldn't happen in a properly formatted file
+                Console.WriteLine("❌ Error: Could not find line start before closing brace in Permissions.cs");
+                return;
+            }
+
+            // Insert constants before the closing brace line, with proper formatting
+            // The constantsCode already has proper indentation (8 spaces)
+            var insertionPoint = lineStart + 1; // Insert after the newline (at the start of the closing brace line)
+            var newContent = existingContent.Insert(insertionPoint, constantsCodeToAdd + Environment.NewLine);
+
+            // Create backup
+            var backupPath = permissionsFilePath + ".backup." + DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+            await File.WriteAllTextAsync(backupPath, existingContent);
+
+            // Write new content
+            await File.WriteAllTextAsync(permissionsFilePath, newContent);
+
+            Console.WriteLine($"✅ Generated {constantsToAdd.Count} constants in Permissions.cs");
+            Console.WriteLine($"   Backup created: {Path.GetFileName(backupPath)}");
+        }
+        else
+        {
+            Console.WriteLine("⚠️  DRY-RUN: Constants not written to file");
+        }
+
+        Console.WriteLine();
+    }
+
+    private static async Task FindAndReplaceStringLiteralsAsync(
+        string solutionPath,
+        List<string> permissionNames,
+        bool autoFix,
+        bool dryRun)
+    {
+        Console.WriteLine("🔍 String Literal Analysis");
+        Console.WriteLine("--------------------------");
+        Console.WriteLine();
+
+        var finder = new StringLiteralFinder();
+        var references = await finder.FindStringLiteralsAsync(solutionPath, permissionNames);
+
+        if (references.Count == 0)
+        {
+            Console.WriteLine("✅ No string literal references found");
+            Console.WriteLine();
+            return;
+        }
+
+        Console.WriteLine($"Found {references.Count} code reference(s) using string literals:");
+        Console.WriteLine();
+
+        // Group by file
+        var byFile = references.GroupBy(r => r.FilePath);
+
+        foreach (var fileGroup in byFile.Take(10))
+        {
+            var filePath = Path.GetRelativePath(solutionPath, fileGroup.Key);
+            Console.WriteLine($"  {filePath}:");
+            
+            foreach (var refItem in fileGroup.Take(5))
+            {
+                Console.WriteLine($"    Line {refItem.LineNumber}: {refItem.Context}");
+                Console.WriteLine($"      Current: {refItem.CurrentCode}");
+                Console.WriteLine($"      Suggested: {refItem.SuggestedCode}");
+            }
+            
+            if (fileGroup.Count() > 5)
+            {
+                Console.WriteLine($"    ... and {fileGroup.Count() - 5} more in this file");
+            }
+        }
+
+        if (byFile.Count() > 10)
+        {
+            Console.WriteLine($"  ... and {byFile.Count() - 10} more files");
+        }
+
+        Console.WriteLine();
+
+        if (autoFix)
+        {
+            Console.WriteLine("🔧 Applying Replacements");
+            Console.WriteLine("-----------------------");
+            Console.WriteLine();
+
+            var replacementService = new LiteralReplacementService();
+            var results = await replacementService.ApplyReplacementsAsync(references, dryRun);
+
+            var successCount = results.Count(r => r.Success);
+            var totalReplacements = results.Sum(r => r.ReplacementsCount);
+
+            Console.WriteLine($"Processed {results.Count} file(s):");
+            foreach (var result in results.Take(10))
+            {
+                var relativePath = Path.GetRelativePath(solutionPath, result.FilePath);
+                if (result.Success)
+                {
+                    Console.WriteLine($"  ✅ {relativePath}: {result.Message}");
+                }
+                else
+                {
+                    Console.WriteLine($"  ❌ {relativePath}: {result.ErrorMessage}");
+                }
+            }
+
+            if (results.Count > 10)
+            {
+                Console.WriteLine($"  ... and {results.Count - 10} more files");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine($"Total: {totalReplacements} replacement(s) in {successCount} file(s)");
+
+            if (dryRun)
+            {
+                Console.WriteLine("⚠️  DRY-RUN: No files were modified");
+            }
+            else
+            {
+                Console.WriteLine("✅ Replacements applied (backups created)");
+            }
+        }
+
+        Console.WriteLine();
+    }
+
+    /// <summary>
+    /// Extracts constant names from Permissions.cs file content.
+    /// </summary>
+    private static HashSet<string> ExtractConstantNamesFromFile(string fileContent)
+    {
+        var constantNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        
+        // Pattern to match: public const string ConstantName = ...
+        // This will match: public const string TenantBillingManage = "tenant-billing:manage";
+        var pattern = @"public\s+const\s+string\s+(\w+)\s*=";
+        var matches = System.Text.RegularExpressions.Regex.Matches(fileContent, pattern);
+        
+        foreach (System.Text.RegularExpressions.Match match in matches)
+        {
+            if (match.Groups.Count > 1)
+            {
+                var constantName = match.Groups[1].Value;
+                constantNames.Add(constantName);
+            }
+        }
+        
+        return constantNames;
     }
 }

@@ -132,6 +132,19 @@ class Program
             IsRequired = false
         };
         
+        var detectMissingPoliciesOption = new Option<bool>(
+            aliases: new[] { "--detect-missing-policies" },
+            description: "Detect missing authorization policy registrations in Program.cs files")
+        {
+            IsRequired = false
+        };
+        var autoRegisterPoliciesOption = new Option<bool>(
+            aliases: new[] { "--auto-register-policies" },
+            description: "Automatically generate and register missing authorization policies in Program.cs")
+        {
+            IsRequired = false
+        };
+
         applyCommand.AddOption(solutionOption);
         applyCommand.AddOption(platformServicesOptionForApply);
         applyCommand.AddOption(dryRunOption);
@@ -141,6 +154,8 @@ class Program
         applyCommand.AddOption(applyPoliciesToEndpointsOption);
         applyCommand.AddOption(excludePathsOption);
         applyCommand.AddOption(defaultPolicyOption);
+        applyCommand.AddOption(detectMissingPoliciesOption);
+        applyCommand.AddOption(autoRegisterPoliciesOption);
         applyCommand.SetHandler(async (InvocationContext context) =>
         {
             var solution = context.ParseResult.GetValueForOption(solutionOption)!;
@@ -152,8 +167,10 @@ class Program
             var applyPoliciesToEndpoints = context.ParseResult.GetValueForOption(applyPoliciesToEndpointsOption);
             var excludePaths = context.ParseResult.GetValueForOption(excludePathsOption);
             var defaultPolicy = context.ParseResult.GetValueForOption(defaultPolicyOption);
+            var detectMissingPolicies = context.ParseResult.GetValueForOption(detectMissingPoliciesOption);
+            var autoRegisterPolicies = context.ParseResult.GetValueForOption(autoRegisterPoliciesOption);
 
-            await ApplyCommand.ExecuteAsync(
+            var exitCode = await ApplyCommand.ExecuteAsync(
                 solution,
                 platformServices,
                 dryRun,
@@ -162,8 +179,11 @@ class Program
                 migrateApiConstants,
                 applyPoliciesToEndpoints,
                 excludePaths,
-                defaultPolicy
-            );
+                defaultPolicy,
+                detectMissingPolicies,
+                autoRegisterPolicies);
+            
+            context.ExitCode = exitCode;
         });
 
         // Test Phase 1 command
@@ -263,6 +283,30 @@ class Program
         {
             IsRequired = false
         };
+        var autoGenerateConstantsOption = new Option<bool>(
+            aliases: new[] { "--auto-generate-constants" },
+            description: "Generate constants for permissions in database but not in constants")
+        {
+            IsRequired = false
+        };
+        var findStringLiteralsOption = new Option<bool>(
+            aliases: new[] { "--find-string-literals" },
+            description: "Find code references using string literals instead of constants")
+        {
+            IsRequired = false
+        };
+        var autoFixLiteralsOption = new Option<bool>(
+            aliases: new[] { "--auto-fix-literals" },
+            description: "Automatically replace string literals with constants (requires --find-string-literals)")
+        {
+            IsRequired = false
+        };
+        var dryRunOptionForValidateDb = new Option<bool>(
+            aliases: new[] { "--dry-run" },
+            description: "Preview changes without applying (for constants generation and literal replacement)")
+        {
+            IsRequired = false
+        };
         
         validateDatabaseCommand.AddOption(solutionOption);
         validateDatabaseCommand.AddOption(platformServicesOptionForValidateDb);
@@ -272,7 +316,32 @@ class Program
         validateDatabaseCommand.AddOption(validateMigrationsOption);
         validateDatabaseCommand.AddOption(findOrphanedOption);
         validateDatabaseCommand.AddOption(fixSuggestionsOption);
-        validateDatabaseCommand.SetHandler(ValidateDatabaseCommand.ExecuteAsync, solutionOption, platformServicesOptionForValidateDb, migrationServiceOptionForValidateDb, connectionStringOption, schemaOption, validateMigrationsOption, findOrphanedOption, fixSuggestionsOption);
+        validateDatabaseCommand.AddOption(autoGenerateConstantsOption);
+        validateDatabaseCommand.AddOption(findStringLiteralsOption);
+        validateDatabaseCommand.AddOption(autoFixLiteralsOption);
+        validateDatabaseCommand.AddOption(dryRunOptionForValidateDb);
+        validateDatabaseCommand.SetHandler(async (InvocationContext context) =>
+        {
+            var solution = context.ParseResult.GetValueForOption(solutionOption)!;
+            var platformServices = context.ParseResult.GetValueForOption(platformServicesOptionForValidateDb)!;
+            var migrationService = context.ParseResult.GetValueForOption(migrationServiceOptionForValidateDb);
+            var connectionString = context.ParseResult.GetValueForOption(connectionStringOption);
+            var schema = context.ParseResult.GetValueForOption(schemaOption);
+            var validateMigrations = context.ParseResult.GetValueForOption(validateMigrationsOption);
+            var findOrphaned = context.ParseResult.GetValueForOption(findOrphanedOption);
+            var fixSuggestions = context.ParseResult.GetValueForOption(fixSuggestionsOption);
+            var autoGenerateConstants = context.ParseResult.GetValueForOption(autoGenerateConstantsOption);
+            var findStringLiterals = context.ParseResult.GetValueForOption(findStringLiteralsOption);
+            var autoFixLiterals = context.ParseResult.GetValueForOption(autoFixLiteralsOption);
+            var dryRun = context.ParseResult.GetValueForOption(dryRunOptionForValidateDb);
+            
+            var exitCode = await ValidateDatabaseCommand.ExecuteAsync(
+                solution, platformServices, migrationService, connectionString, schema,
+                validateMigrations, findOrphaned, fixSuggestions,
+                autoGenerateConstants, findStringLiterals, autoFixLiterals, dryRun);
+            
+            context.ExitCode = exitCode;
+        });
 
         rootCommand.AddCommand(scanCommand);
         rootCommand.AddCommand(generateCommand);
