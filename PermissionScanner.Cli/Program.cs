@@ -56,12 +56,20 @@ class Program
             IsRequired = false
         };
         scopeOption.SetDefaultValue("all");
+
+        var emitFrontendOption = new Option<string?>(
+            aliases: new[] { "--emit-frontend" },
+            description: "Path to kronos-app root. Emits src/constants/permissions.generated.ts (BACKEND_PERMISSIONS) for frontend alignment.")
+        {
+            IsRequired = false
+        };
         
         generateCommand.AddOption(solutionOption);
         generateCommand.AddOption(platformServicesOption);
         generateCommand.AddOption(updateFilesOption);
         generateCommand.AddOption(scopeOption);
-        generateCommand.SetHandler(GenerateCommand.ExecuteAsync, solutionOption, platformServicesOption, updateFilesOption, scopeOption);
+        generateCommand.AddOption(emitFrontendOption);
+        generateCommand.SetHandler(GenerateCommand.ExecuteAsync, solutionOption, platformServicesOption, updateFilesOption, scopeOption, emitFrontendOption);
 
         // Validate command
         var validateCommand = new Command("validate", "Validate that all endpoints have authorization policies");

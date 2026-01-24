@@ -43,6 +43,18 @@ dotnet tool run permission-scanner generate \
   --update-files
 ```
 
+### Emit Frontend Permissions (TypeScript)
+
+```bash
+dotnet run --project PermissionScanner.Cli -- generate \
+  --solution ../../kronos-services \
+  --platform-services ../../kronos-services/Kronos.Sales.PlatformServices \
+  --update-files \
+  --emit-frontend ../../kronos-app
+```
+
+Writes `kronos-app/src/constants/permissions.generated.ts` with `BACKEND_PERMISSIONS`. The frontend imports these and uses them in `FEATURE_PERMISSIONS` / `PermissionGuard`. Run after backend permission changes to keep frontend aligned.
+
 ### Validate
 
 ```bash
@@ -61,6 +73,7 @@ The tool generates/updates:
 - `KS.PlatformServices/Constants/Permissions.cs` - Permission name constants
 - `KS.PlatformServices/Constants/AuthorizationPolicies.cs` - Policy name constants
 - Policy registration snippets for each service
+- With `--emit-frontend <kronos-app>`: `kronos-app/src/constants/permissions.generated.ts` (`BACKEND_PERMISSIONS`) for frontend alignment
 
 ## See Also
 

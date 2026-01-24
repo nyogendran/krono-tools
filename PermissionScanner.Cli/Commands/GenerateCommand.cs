@@ -10,7 +10,7 @@ namespace PermissionScanner.Cli.Commands;
 /// </summary>
 public class GenerateCommand
 {
-    public static async Task<int> ExecuteAsync(string solutionPath, string platformServicesPath, bool updateFiles, string scope)
+    public static async Task<int> ExecuteAsync(string solutionPath, string platformServicesPath, bool updateFiles, string scope, string? emitFrontendPath = null)
     {
         try
         {
@@ -155,6 +155,13 @@ public class GenerateCommand
             {
                 // Dry-run mode: show what would be generated
                 PrintClassificationReport(sharedPermissions, serviceSpecificPermissions, sharedPolicies);
+            }
+
+            // Emit frontend TypeScript (optional, uses same permission set as backend)
+            if (!string.IsNullOrWhiteSpace(emitFrontendPath))
+            {
+                var allForFrontend = sharedPermissions.Concat(serviceSpecificPermissions.Values.SelectMany(x => x)).ToList();
+                await EmitFrontendPermissionsAsync(emitFrontendPath.Trim(), allForFrontend);
             }
 
             return 0;
@@ -392,5 +399,19 @@ public class GenerateCommand
         Console.WriteLine();
         Console.WriteLine("Use --update-files to write constants to files");
         Console.WriteLine("Use --scope <scope> to filter (options: 'shared', 'all', or service name)");
+        Console.WriteLine("Use --emit-frontend <path> to write permissions.generated.ts to kronos-app");
+    }
+
+    /// <summary>
+    /// Emits TypeScript BACKEND_PERMISSIONS to kronos-app/src/constants/permissions.generated.ts.
+    /// </summary>
+    private static async Task EmitFrontendPermissionsAsync(string kronosAppRoot, List<PermissionDefinition> permissions)
+    {
+        var dir = Path.Combine(kronosAppRoot, "src", "constants");
+        Directory.CreateDirectory(dir);
+        var filePath = Path.Combine(dir, "permissions.generated.ts");
+        var content = FrontendPermissionConstantsGenerator.GenerateTypeScript(permissions);
+        await File.WriteAllTextAsync(filePath, content);
+        Console.WriteLine($"✅ Emitted frontend permissions: {filePath} ({permissions.Count} permissions)");
     }
 }
